@@ -18,7 +18,7 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8615982333:AAEtzMXZXQIQZ_RemRvvntFWtS3LjU8tL98")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8615982333:AAFxVYZV3ZFXdnN6-wXC4A13muMbLg9rVeE")
 API_BASE = "https://api.mail.tm"
 MERCURE_HUB = "https://mercure.mail.tm/.well-known/mercure"
 
