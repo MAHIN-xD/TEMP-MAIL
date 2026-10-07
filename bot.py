@@ -18,15 +18,13 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 
-# ================= CONFIGURATION ================= #
-# Render-এর Environment Variables থেকে টোকেন নেবে, না পেলে ব্যাকআপ টোকেন কাজ করবে
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8615982333:AAEtzMXZXQIQZ_RemRvvntFWtS3LjU8tL98")
-
 API_BASE = "https://api.mail.tm"
 MERCURE_HUB = "https://mercure.mail.tm/.well-known/mercure"
 
 logging.basicConfig(level=logging.INFO)
 
+# HTML parse mode must on
 bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -35,8 +33,6 @@ dp = Dispatcher()
 
 user_sessions = {}
 active_sse_tasks = {}
-
-# ================= UTILITY FUNCTIONS ================= #
 
 def random_string(length=7):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
@@ -47,8 +43,8 @@ def extract_otp(text):
     matches = re.findall(r'\b\d{4,8}\b', text)
     return matches[0] if matches else None
 
+# Button UI exact match kora
 def get_main_keyboard(email):
-    """১ম ডিজাইনের হুবহু বাটন লেআউট"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -70,14 +66,11 @@ def get_main_keyboard(email):
         ]
     )
 
-# ================= MAIL.TM API ================= #
-
 async def create_mail():
     username = f"usr_{random_string(8)}"
     password = f"Sec_{random_string(8)}!1"
 
     async with ClientSession() as session:
-        # ১. ডোমেইন সংগ্রহ
         async with session.get(f"{API_BASE}/domains") as res:
             if res.status != 200:
                 return None
@@ -87,14 +80,12 @@ async def create_mail():
         email = f"{username}@{domain}"
         payload = {"address": email, "password": password}
 
-        # ২. অ্যাকাউন্ট তৈরি
         async with session.post(f"{API_BASE}/accounts", json=payload) as res:
             if res.status not in (200, 201):
                 return None
             acc_data = await res.json()
             account_id = acc_data.get('id')
 
-        # ৩. টোকেন তৈরি
         async with session.post(f"{API_BASE}/token", json=payload) as res:
             if res.status != 200:
                 return None
@@ -116,14 +107,11 @@ async def fetch_message_detail(message_id, token):
     return None
 
 async def delete_after_delay(chat_id, message_id, delay=60):
-    """মেসেজ আসার ঠিক ১ মিনিট পর স্বয়ংক্রিয়ভাবে মুছে দেবে"""
     await asyncio.sleep(delay)
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
         pass
-
-# ================= ULTRA-FAST SSE LISTENER ================= #
 
 async def sse_listener(user_id, account_id, token, email):
     url = f"{MERCURE_HUB}?topic=/accounts/{account_id}"
@@ -147,7 +135,7 @@ async def sse_listener(user_id, account_id, token, email):
 
                 otp = extract_otp(full_content) or "N/A"
 
-                # ২য় ছবির হুবহু মিনিমাল মেসেজ
+                # 2nd photo er moto message format
                 otp_msg_text = (
                     f"✉️ <b>Email:</b> <code>{email}</code>\n"
                     f"🔐 <b>OTP:</b> <code>{otp}</code>"
@@ -175,15 +163,12 @@ async def sse_listener(user_id, account_id, token, email):
                 if user_id in user_sessions:
                     user_sessions[user_id]["last_sms"] = full_content
 
-                # ১ মিনিট পর অটো-ডিলিট টাস্ক
                 asyncio.create_task(delete_after_delay(user_id, sent_msg.message_id, 60))
 
     except asyncio.CancelledError:
         pass
     except Exception as e:
-        logging.error(f"SSE Error for user {user_id}: {e}")
-
-# ================= TELEGRAM HANDLERS ================= #
+        logging.error(f"SSE Error: {e}")
 
 @dp.message(F.text == "/start")
 async def start_cmd(message: Message):
@@ -204,6 +189,7 @@ async def start_cmd(message: Message):
     )
     active_sse_tasks[user_id] = task
 
+    # Exact text formatting
     await message.answer(
         "নিচের বাটনে ক্লিক করলেই copy হয়ে যাবে 👇",
         reply_markup=get_main_keyboard(account["email"])
@@ -212,7 +198,7 @@ async def start_cmd(message: Message):
 @dp.callback_query(F.data == "change")
 async def on_change(call: CallbackQuery):
     user_id = call.from_user.id
-    await call.answer("⚡ Generating new email...")
+    await call.answer("⚡ Generating...")
 
     if user_id in active_sse_tasks:
         active_sse_tasks[user_id].cancel()
@@ -236,7 +222,7 @@ async def on_change(call: CallbackQuery):
 
 @dp.callback_query(F.data == "refresh")
 async def on_refresh(call: CallbackQuery):
-    await call.answer("🔄 Listening live! Ready for codes.", show_alert=False)
+    await call.answer("🔄 Inbox listening active!", show_alert=False)
 
 @dp.callback_query(F.data == "copy_email")
 async def on_copy_email(call: CallbackQuery):
@@ -247,15 +233,13 @@ async def on_copy_email(call: CallbackQuery):
 @dp.callback_query(F.data.startswith("copy_otp:"))
 async def on_copy_otp(call: CallbackQuery):
     otp = call.data.split(":")[1]
-    await call.answer(f"{otp}", show_alert=False)
+    await call.answer(f"Copied: {otp}", show_alert=False)
 
 @dp.callback_query(F.data == "copy_full")
 async def on_copy_full(call: CallbackQuery):
     user_id = call.from_user.id
     last_sms = user_sessions.get(user_id, {}).get("last_sms", "No text found")
     await call.answer(last_sms[:180], show_alert=True)
-
-# ================= RUNNER ================= #
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
